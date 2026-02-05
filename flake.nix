@@ -81,15 +81,32 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
+          isLinux = pkgs.stdenv.isLinux;
         in
         {
+          # Schema validation
           config-schema = pkgs.callPackage ./checks/config-schema.nix {
             configSchema = self.packages.${system}.openclaw-config-schema;
           };
 
-          module-eval = import ./checks/module-eval.nix {
+          # Home Manager module evaluation
+          hm-module-eval = import ./checks/module-eval.nix {
             inherit pkgs home-manager;
             openclawModule = self.homeManagerModules.openclaw;
+          };
+
+          # NixOS module evaluation (Linux only - uses lib.nixosSystem)
+          nixos-module-eval = import ./checks/nixos-module-eval.nix {
+            inherit pkgs nixpkgs;
+            lib = nixpkgs.lib;
+            nixosModule = self.nixosModules.openclaw;
+          };
+        }
+        // nixpkgs.lib.optionalAttrs isLinux {
+          # NixOS VM integration test (Linux only, requires KVM)
+          nixos-vm-test = import ./checks/nixos-vm-test.nix {
+            inherit pkgs;
+            nixosModule = self.nixosModules.openclaw;
           };
         }
       );
