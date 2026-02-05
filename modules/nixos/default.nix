@@ -17,6 +17,17 @@ let
 
   defaultPackage = llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.openclaw;
 
+  # Collect all packages from plugins + skillPackages
+  pluginPackages = lib.flatten (lib.mapAttrsToList (_: p: p.packages) cfg.plugins);
+  allPackages = cfg.skillPackages ++ pluginPackages;
+
+  # Collect all skills from plugins + skills
+  pluginSkills = lib.mapAttrs' (name: p: {
+    name = name;
+    value = p.skill;
+  }) cfg.plugins;
+  allSkills = cfg.skills // pluginSkills;
+
   configJson = builtins.toJSON cfg.settings;
   rawConfigFile = pkgs.writeText "openclaw.json" configJson;
 
@@ -41,18 +52,34 @@ let
   # Use validated or raw config based on setting
   configFile = if cfg.validateConfig then validatedConfigFile else rawConfigFile;
 
-  # Script to symlink skills
+  # Script to symlink skills (from both skills and plugins)
   skillsSetup = lib.concatStringsSep "\n" (
     lib.mapAttrsToList (name: path: ''
       ln -sf ${path} "${cfg.workspaceDir}/skills/${name}.md"
-    '') cfg.skills
+    '') allSkills
   );
+
+  # Plugin submodule type
+  pluginType = lib.types.submodule {
+    options = {
+      skill = lib.mkOption {
+        type = lib.types.path;
+        description = "Path to the skill markdown file";
+      };
+      packages = lib.mkOption {
+        type = lib.types.listOf lib.types.package;
+        default = [ ];
+        description = "CLI tools required by this skill";
+      };
+    };
+  };
 
   gatewayWrapper = pkgs.writeShellScriptBin "openclaw-gateway-wrapper" ''
     set -euo pipefail
 
-    ${lib.optionalString (cfg.skillPackages != [ ]) ''
-      export PATH="${lib.makeBinPath cfg.skillPackages}:$PATH"
+    # Add skill/plugin packages to PATH
+    ${lib.optionalString (allPackages != [ ]) ''
+      export PATH="${lib.makeBinPath allPackages}:$PATH"
     ''}
 
     ${lib.concatStringsSep "\n" (
@@ -131,11 +158,35 @@ in
       '';
     };
 
+    plugins = lib.mkOption {
+      type = lib.types.attrsOf pluginType;
+      default = { };
+      example = lib.literalExpression ''
+        {
+          github = {
+            skill = ./skills/github.md;
+            packages = [ pkgs.gh ];
+          };
+          weather = {
+            skill = ./skills/weather.md;
+            packages = [ pkgs.curl pkgs.jq ];
+          };
+        }
+      '';
+      description = ''
+        Plugins bundle a skill file with its required CLI tools.
+        The plugin name becomes the skill name in the workspace.
+      '';
+    };
+
     skillPackages = lib.mkOption {
       type = lib.types.listOf lib.types.package;
       default = [ ];
       example = lib.literalExpression "[ pkgs.jq pkgs.curl pkgs.ripgrep ]";
-      description = "CLI tools to make available in PATH for skills";
+      description = ''
+        Global CLI tools available to all skills.
+        For skill-specific tools, use plugins instead.
+      '';
     };
 
     skills = lib.mkOption {
@@ -143,11 +194,13 @@ in
       default = { };
       example = lib.literalExpression ''
         {
-          weather = ./skills/weather.md;
-          calendar = ./skills/calendar.md;
+          notes = ./skills/notes.md;
         }
       '';
-      description = "Skill name to markdown file path mapping";
+      description = ''
+        Simple skills without CLI dependencies.
+        For skills with dependencies, use plugins instead.
+      '';
     };
 
     stateDir = lib.mkOption {

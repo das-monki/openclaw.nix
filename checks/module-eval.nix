@@ -78,11 +78,51 @@ let
     ];
   };
 
+  # Test 4: With plugins
+  withPluginsEval = home-manager.lib.homeManagerConfiguration {
+    inherit pkgs;
+    modules = [
+      openclawModule
+      {
+        home.username = "testuser";
+        home.homeDirectory = "/home/testuser";
+        home.stateVersion = "24.05";
+
+        services.openclaw = {
+          enable = true;
+          settings.gateway.mode = "local";
+          plugins = {
+            github = {
+              skill = pkgs.writeText "github.md" ''
+                # GitHub Skill
+                Use gh CLI.
+              '';
+              packages = [ pkgs.gh ];
+            };
+          };
+          # Also test that standalone skills still work alongside plugins
+          skills = {
+            notes = pkgs.writeText "notes.md" ''
+              # Notes Skill
+              Simple notes.
+            '';
+          };
+        };
+      }
+    ];
+  };
+
   # Extract test results
   basicConfig = basicEval.config.home.file.".openclaw/openclaw.json".source or null;
   skillFile =
     withSkillsEval.config.home.file.".openclaw/workspace/skills/test-skill.md".source or null;
   wrapperPackage = builtins.head (withSecretsEval.config.home.packages or [ ]);
+
+  # Test 4: Plugin skill and standalone skill both present
+  pluginSkillFile =
+    withPluginsEval.config.home.file.".openclaw/workspace/skills/github.md".source or null;
+  standaloneSkillFile =
+    withPluginsEval.config.home.file.".openclaw/workspace/skills/notes.md".source or null;
 
   # Check systemd service is defined (Linux only)
   systemdService =
@@ -174,6 +214,34 @@ pkgs.runCommand "openclaw-module-eval-check" { } ''
     else
       ''
         echo "  FAIL: launchd agent not defined"
+        exit 1
+      ''
+  }
+  echo ""
+
+  # Test 5: Plugins
+  echo "Test 5: Plugins integration..."
+  ${
+    if pluginSkillFile != null then
+      ''
+        echo "  PASS: Plugin skill file symlinked"
+        echo "  Plugin skill: ${pluginSkillFile}"
+      ''
+    else
+      ''
+        echo "  FAIL: Plugin skill file not found"
+        exit 1
+      ''
+  }
+  ${
+    if standaloneSkillFile != null then
+      ''
+        echo "  PASS: Standalone skill file symlinked alongside plugin"
+        echo "  Standalone skill: ${standaloneSkillFile}"
+      ''
+    else
+      ''
+        echo "  FAIL: Standalone skill file not found"
         exit 1
       ''
   }

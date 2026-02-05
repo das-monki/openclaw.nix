@@ -31,6 +31,15 @@ let
               gateway.mode = "local";
             };
             skillPackages = [ pkgs.jq ];
+            plugins = {
+              github = {
+                skill = pkgs.writeText "github.md" ''
+                  # GitHub Skill
+                  Use gh CLI.
+                '';
+                packages = [ pkgs.gh ];
+              };
+            };
             skills = {
               test-skill = pkgs.writeText "test-skill.md" ''
                 # Test Skill
