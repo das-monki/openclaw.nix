@@ -41,8 +41,8 @@ stdenv.mkDerivation {
 
     # Extract schema using tsx
     pnpm exec tsx -e "
-      import { ClawdbotSchema } from './src/config/zod-schema.ts';
-      const schema = ClawdbotSchema.toJSONSchema({
+      import { OpenClawSchema } from './src/config/zod-schema.ts';
+      const schema = OpenClawSchema.toJSONSchema({
         target: 'draft-07',
         unrepresentable: 'any'
       });

@@ -12,6 +12,10 @@ let
     gateway = {
       mode = "local";
     };
+    commands = {
+      native = "auto";
+      nativeSkills = "auto";
+    };
   };
 
   testConfigFile = builtins.toFile "test-config.json" testConfig;
