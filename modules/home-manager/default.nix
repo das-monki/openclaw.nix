@@ -1,5 +1,8 @@
 # Home Manager module for Openclaw
-{ llm-agents }:
+{
+  llm-agents,
+  configSchemaPackage,
+}:
 
 {
   config,
@@ -21,7 +24,28 @@ let
 
   # Generate JSON config from Nix
   configJson = builtins.toJSON cfg.settings;
-  configFile = pkgs.writeText "openclaw.json" configJson;
+  rawConfigFile = pkgs.writeText "openclaw.json" configJson;
+
+  # Build config schema for validation
+  configSchema = pkgs.callPackage configSchemaPackage {
+    openclaw = cfg.package;
+  };
+
+  # Validated config file (validates at build time)
+  validatedConfigFile =
+    pkgs.runCommand "openclaw-validated-config.json"
+      {
+        nativeBuildInputs = [ pkgs.check-jsonschema ];
+      }
+      ''
+        echo "Validating openclaw config against upstream schema..."
+        check-jsonschema --schemafile ${configSchema}/config-schema.json ${rawConfigFile}
+        echo "Validation passed!"
+        cp ${rawConfigFile} $out
+      '';
+
+  # Use validated or raw config based on setting
+  configFile = if cfg.validateConfig then validatedConfigFile else rawConfigFile;
 
   # Wrapper script that sets up PATH and loads secrets
   gatewayWrapper = pkgs.writeShellScriptBin "openclaw-gateway-wrapper" ''
@@ -141,7 +165,7 @@ in
       default = false;
       description = ''
         Validate config against upstream JSON schema at build time.
-        Requires the config-schema package to be available.
+        When enabled, invalid configs will fail the build.
       '';
     };
   };
@@ -154,8 +178,8 @@ in
 
     # Symlink config and skills
     home.file = lib.mkMerge [
-      # Config file
-      { "${toRelative cfg.stateDir}/openclaw.json".text = configJson; }
+      # Config file (validated if validateConfig=true)
+      { "${toRelative cfg.stateDir}/openclaw.json".source = configFile; }
 
       # Skills
       (lib.mapAttrs' (name: path: {

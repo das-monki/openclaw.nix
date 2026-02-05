@@ -1,6 +1,9 @@
 # NixOS system-level module for Openclaw
 # Runs as a system service with a dedicated user
-{ llm-agents }:
+{
+  llm-agents,
+  configSchemaPackage,
+}:
 
 {
   config,
@@ -15,7 +18,35 @@ let
   defaultPackage = llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.openclaw;
 
   configJson = builtins.toJSON cfg.settings;
-  configFile = pkgs.writeText "openclaw.json" configJson;
+  rawConfigFile = pkgs.writeText "openclaw.json" configJson;
+
+  # Build config schema for validation
+  configSchema = pkgs.callPackage configSchemaPackage {
+    openclaw = cfg.package;
+  };
+
+  # Validated config file (validates at build time)
+  validatedConfigFile =
+    pkgs.runCommand "openclaw-validated-config.json"
+      {
+        nativeBuildInputs = [ pkgs.check-jsonschema ];
+      }
+      ''
+        echo "Validating openclaw config against upstream schema..."
+        check-jsonschema --schemafile ${configSchema}/config-schema.json ${rawConfigFile}
+        echo "Validation passed!"
+        cp ${rawConfigFile} $out
+      '';
+
+  # Use validated or raw config based on setting
+  configFile = if cfg.validateConfig then validatedConfigFile else rawConfigFile;
+
+  # Script to symlink skills
+  skillsSetup = lib.concatStringsSep "\n" (
+    lib.mapAttrsToList (name: path: ''
+      ln -sf ${path} "${cfg.workspaceDir}/skills/${name}.md"
+    '') cfg.skills
+  );
 
   gatewayWrapper = pkgs.writeShellScriptBin "openclaw-gateway-wrapper" ''
     set -euo pipefail
@@ -43,6 +74,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = defaultPackage;
+      defaultText = lib.literalExpression "llm-agents.packages.\${system}.openclaw";
       description = "The openclaw package to use";
     };
 
@@ -59,7 +91,26 @@ in
     };
 
     settings = lib.mkOption {
-      type = lib.types.attrsOf lib.types.anything;
+      type = lib.types.submodule {
+        freeformType = lib.types.attrsOf lib.types.anything;
+        options = {
+          gateway = lib.mkOption {
+            type = lib.types.submodule {
+              freeformType = lib.types.attrsOf lib.types.anything;
+              options.mode = lib.mkOption {
+                type = lib.types.enum [
+                  "local"
+                  "remote"
+                ];
+                default = "local";
+                description = "Gateway mode";
+              };
+            };
+            default = { };
+            description = "Gateway configuration";
+          };
+        };
+      };
       default = { };
       description = "Openclaw configuration (converted to JSON)";
     };
@@ -67,13 +118,36 @@ in
     secretFiles = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = { };
-      description = "Environment variable name to secret file path mapping";
+      example = lib.literalExpression ''
+        {
+          ANTHROPIC_API_KEY = config.age.secrets.anthropic.path;
+          TELEGRAM_BOT_TOKEN = config.age.secrets.telegram.path;
+        }
+      '';
+      description = ''
+        Mapping of environment variable names to secret file paths.
+        At runtime, the contents of each file are read and exported.
+        Compatible with agenix, sops-nix, or any secrets manager.
+      '';
     };
 
     skillPackages = lib.mkOption {
       type = lib.types.listOf lib.types.package;
       default = [ ];
-      description = "CLI tools to make available for skills";
+      example = lib.literalExpression "[ pkgs.jq pkgs.curl pkgs.ripgrep ]";
+      description = "CLI tools to make available in PATH for skills";
+    };
+
+    skills = lib.mkOption {
+      type = lib.types.attrsOf lib.types.path;
+      default = { };
+      example = lib.literalExpression ''
+        {
+          weather = ./skills/weather.md;
+          calendar = ./skills/calendar.md;
+        }
+      '';
+      description = "Skill name to markdown file path mapping";
     };
 
     stateDir = lib.mkOption {
@@ -82,10 +156,26 @@ in
       description = "Directory for openclaw state";
     };
 
+    workspaceDir = lib.mkOption {
+      type = lib.types.str;
+      default = "${cfg.stateDir}/workspace";
+      defaultText = lib.literalExpression ''"''${config.services.openclaw.stateDir}/workspace"'';
+      description = "Directory for openclaw workspace (skills, etc.)";
+    };
+
     gatewayPort = lib.mkOption {
       type = lib.types.port;
       default = 18789;
       description = "Port for the openclaw gateway";
+    };
+
+    validateConfig = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Validate config against upstream JSON schema at build time.
+        When enabled, invalid configs will fail the build.
+      '';
     };
   };
 
@@ -129,8 +219,14 @@ in
       };
 
       preStart = ''
-        mkdir -p "${cfg.stateDir}/workspace/skills"
+        # Create directories
+        mkdir -p "${cfg.stateDir}" "${cfg.workspaceDir}" "${cfg.workspaceDir}/skills"
+
+        # Symlink config (validated if validateConfig=true)
         ln -sf ${configFile} "${cfg.stateDir}/openclaw.json"
+
+        # Symlink skills
+        ${skillsSetup}
       '';
     };
   };

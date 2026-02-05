@@ -36,12 +36,14 @@
 
       homeManagerModules.openclaw = import ./modules/home-manager {
         inherit llm-agents;
+        configSchemaPackage = ./packages/config-schema.nix;
       };
       homeManagerModules.default = self.homeManagerModules.openclaw;
 
       # NixOS system-level module (uses User= directive)
       nixosModules.openclaw = import ./modules/nixos {
         inherit llm-agents;
+        configSchemaPackage = ./packages/config-schema.nix;
       };
       nixosModules.default = self.nixosModules.openclaw;
 
