@@ -1,20 +1,17 @@
-# Validate a test config against the upstream schema
+# Validate a test config by merging with upstream defaults and checking against schema
 {
   lib,
   runCommand,
+  jq,
   check-jsonschema,
   configSchema,
 }:
 
 let
-  # Minimal valid test config
+  # Minimal test config - will be merged with defaults before validation
   testConfig = builtins.toJSON {
     gateway = {
       mode = "local";
-    };
-    commands = {
-      native = "auto";
-      nativeSkills = "auto";
     };
   };
 
@@ -23,23 +20,45 @@ in
 
 runCommand "openclaw-config-schema-check"
   {
-    nativeBuildInputs = [ check-jsonschema ];
+    nativeBuildInputs = [
+      jq
+      check-jsonschema
+    ];
   }
   ''
-    echo "Validating openclaw config against JSON schema..."
+    echo "Testing openclaw config schema validation..."
     echo "Schema: ${configSchema}/config-schema.json"
-    echo "Config: ${testConfigFile}"
+    echo "Defaults: ${configSchema}/config-defaults.json"
+    echo "User config: ${testConfigFile}"
     echo ""
-    echo "Test config contents:"
+    echo "User config contents:"
     cat ${testConfigFile}
     echo ""
 
+    echo "Defaults excerpt (first 30 lines):"
+    head -30 ${configSchema}/config-defaults.json
+    echo "..."
+    echo ""
+
+    echo "Merging user config with defaults..."
+    jq -s '.[0] * .[1]' \
+      ${configSchema}/config-defaults.json \
+      ${testConfigFile} \
+      > merged-config.json
+
+    echo "Merged config excerpt (first 50 lines):"
+    head -50 merged-config.json
+    echo "..."
+    echo ""
+
+    echo "Validating merged config against schema..."
     check-jsonschema \
       --schemafile ${configSchema}/config-schema.json \
-      ${testConfigFile}
+      merged-config.json
 
     echo ""
-    echo "Schema validation passed!"
+    echo "Validation passed!"
     mkdir -p $out
+    cp merged-config.json $out/config-with-defaults.json
     echo "passed" > $out/result
   ''

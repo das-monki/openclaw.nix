@@ -1,4 +1,4 @@
-# Extract JSON schema from openclaw source for config validation
+# Extract JSON schema and defaults from openclaw source for config validation
 {
   lib,
   stdenv,
@@ -51,7 +51,7 @@ stdenv.mkDerivation {
     export HOME=$TMPDIR
     export PNPM_HOME=$TMPDIR/.pnpm
 
-    # Extract schema using tsx (run directly from node_modules)
+    # Extract JSON schema using tsx
     ./node_modules/.bin/tsx -e "
       import { OpenClawSchema } from './src/config/zod-schema.ts';
       const schema = OpenClawSchema.toJSONSchema({
@@ -61,6 +61,22 @@ stdenv.mkDerivation {
       console.log(JSON.stringify(schema, null, 2));
     " > config-schema.json
 
+    # Extract defaults by parsing an empty config through Zod (applies all .default() values)
+    ./node_modules/.bin/tsx -e "
+      import { OpenClawSchema } from './src/config/zod-schema.ts';
+
+      // Parse empty object through Zod - this applies all .default() modifiers
+      const result = OpenClawSchema.safeParse({});
+
+      if (!result.success) {
+        // If empty object fails, try with minimal required fields
+        console.error('Warning: empty config failed validation, outputting empty defaults');
+        console.log('{}');
+      } else {
+        console.log(JSON.stringify(result.data, null, 2));
+      }
+    " > config-defaults.json
+
     runHook postBuild
   '';
 
@@ -69,12 +85,13 @@ stdenv.mkDerivation {
 
     mkdir -p $out
     cp config-schema.json $out/
+    cp config-defaults.json $out/
 
     runHook postInstall
   '';
 
   meta = {
-    description = "JSON schema for openclaw configuration";
+    description = "JSON schema and defaults for openclaw configuration";
     homepage = "https://github.com/openclaw/openclaw";
     license = lib.licenses.mit;
   };

@@ -42,17 +42,29 @@ let
     openclaw = cfg.package;
   };
 
-  # Validated config file (validates at build time)
+  # Validated config file (merges with upstream defaults, then validates against schema)
   validatedConfigFile =
     pkgs.runCommand "openclaw-validated-config.json"
       {
-        nativeBuildInputs = [ pkgs.check-jsonschema ];
+        nativeBuildInputs = [
+          pkgs.jq
+          pkgs.check-jsonschema
+        ];
       }
       ''
-        echo "Validating openclaw config against upstream schema..."
-        check-jsonschema --schemafile ${configSchema}/config-schema.json ${rawConfigFile}
+        echo "Merging user config with upstream defaults..."
+
+        # Deep merge: defaults * user config (user config wins)
+        jq -s '.[0] * .[1]' \
+          ${configSchema}/config-defaults.json \
+          ${rawConfigFile} \
+          > merged-config.json
+
+        echo "Validating merged config against upstream schema..."
+        check-jsonschema --schemafile ${configSchema}/config-schema.json merged-config.json
+
         echo "Validation passed!"
-        cp ${rawConfigFile} $out
+        cp merged-config.json $out
       '';
 
   # Use validated or raw config based on setting
@@ -217,7 +229,10 @@ in
       default = false;
       description = ''
         Validate config against upstream JSON schema at build time.
-        When enabled, invalid configs will fail the build.
+        When enabled, the user config is merged with openclaw's runtime defaults
+        (extracted from the Zod schema), then validated against the JSON schema.
+        Invalid configs will fail the build. The deployed config file will
+        include all defaults merged in.
       '';
     };
   };
