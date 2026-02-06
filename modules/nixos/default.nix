@@ -37,21 +37,16 @@ let
   };
 
   # Validated config file (parses through Zod which applies all defaults)
-  validatedConfigFile =
-    pkgs.runCommand "openclaw-validated-config.json"
-      {
-        nativeBuildInputs = [ pkgs.nodejs_22 ];
-      }
-      ''
-        echo "Validating config through openclaw's Zod schema..."
-        echo "This applies runtime defaults to all configured paths."
-        echo ""
+  validatedConfigFile = pkgs.runCommand "openclaw-validated-config.json" { } ''
+    echo "Validating config through openclaw's Zod schema..."
+    echo "This applies runtime defaults to all configured paths."
+    echo ""
 
-        # Parse through Zod - applies defaults and validates
-        ${configSchema}/bin/validate-openclaw-config ${rawConfigFile} > $out
+    # Parse through Zod - applies defaults and validates
+    ${configSchema}/bin/validate-openclaw-config ${rawConfigFile} > $out
 
-        echo "Validation passed!"
-      '';
+    echo "Validation passed!"
+  '';
 
   # Use validated or raw config based on setting
   configFile = if cfg.validateConfig then validatedConfigFile else rawConfigFile;

@@ -124,9 +124,9 @@ stdenv.mkDerivation {
         # Install bundled validation script
         cp validate-config.cjs $out/
 
-        # Create wrapper script
-        cat > $out/bin/validate-openclaw-config << 'WRAPPER'
-    #!/usr/bin/env node
+        # Create wrapper script with absolute node path (no /usr/bin/env in sandbox)
+        cat > $out/bin/validate-openclaw-config << WRAPPER
+    #!${nodejs_22}/bin/node
     require(require('path').join(__dirname, '..', 'validate-config.cjs'));
     WRAPPER
         chmod +x $out/bin/validate-openclaw-config

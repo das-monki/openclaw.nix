@@ -3,7 +3,6 @@
 {
   lib,
   runCommand,
-  nodejs_22,
   configSchema,
 }:
 
@@ -30,62 +29,58 @@ let
   testConfigFile = builtins.toFile "test-config-channels.json" testConfig;
 in
 
-runCommand "openclaw-config-schema-channels-check"
-  {
-    nativeBuildInputs = [ nodejs_22 ];
-  }
-  ''
-    echo "Testing channel config validation through Zod..."
-    echo "This verifies that Zod applies defaults to nested channel configs."
-    echo ""
-    echo "Input config (partial channel configs):"
-    cat ${testConfigFile}
-    echo ""
+runCommand "openclaw-config-schema-channels-check" { } ''
+  echo "Testing channel config validation through Zod..."
+  echo "This verifies that Zod applies defaults to nested channel configs."
+  echo ""
+  echo "Input config (partial channel configs):"
+  cat ${testConfigFile}
+  echo ""
 
-    echo "Parsing through Zod schema..."
-    ${configSchema}/bin/validate-openclaw-config ${testConfigFile} > validated.json
+  echo "Parsing through Zod schema..."
+  ${configSchema}/bin/validate-openclaw-config ${testConfigFile} > validated.json
 
-    echo ""
-    echo "Validation passed! Checking that defaults were applied..."
+  echo ""
+  echo "Validation passed! Checking that defaults were applied..."
 
-    # Verify telegram defaults were applied
-    if grep -q '"dmPolicy"' validated.json; then
-      echo "✓ telegram.dmPolicy default applied"
-    else
-      echo "✗ telegram.dmPolicy missing!"
-      exit 1
-    fi
+  # Verify telegram defaults were applied
+  if grep -q '"dmPolicy"' validated.json; then
+    echo "✓ telegram.dmPolicy default applied"
+  else
+    echo "✗ telegram.dmPolicy missing!"
+    exit 1
+  fi
 
-    if grep -q '"streamMode"' validated.json; then
-      echo "✓ telegram.streamMode default applied"
-    else
-      echo "✗ telegram.streamMode missing!"
-      exit 1
-    fi
+  if grep -q '"streamMode"' validated.json; then
+    echo "✓ telegram.streamMode default applied"
+  else
+    echo "✗ telegram.streamMode missing!"
+    exit 1
+  fi
 
-    # Verify whatsapp defaults were applied
-    if grep -q '"debounceMs"' validated.json; then
-      echo "✓ whatsapp.debounceMs default applied"
-    else
-      echo "✗ whatsapp.debounceMs missing!"
-      exit 1
-    fi
+  # Verify whatsapp defaults were applied
+  if grep -q '"debounceMs"' validated.json; then
+    echo "✓ whatsapp.debounceMs default applied"
+  else
+    echo "✗ whatsapp.debounceMs missing!"
+    exit 1
+  fi
 
-    if grep -q '"mediaMaxMb"' validated.json; then
-      echo "✓ whatsapp.mediaMaxMb default applied"
-    else
-      echo "✗ whatsapp.mediaMaxMb missing!"
-      exit 1
-    fi
+  if grep -q '"mediaMaxMb"' validated.json; then
+    echo "✓ whatsapp.mediaMaxMb default applied"
+  else
+    echo "✗ whatsapp.mediaMaxMb missing!"
+    exit 1
+  fi
 
-    echo ""
-    echo "All channel defaults correctly applied!"
-    echo ""
-    echo "Output config excerpt:"
-    head -80 validated.json
-    echo "..."
+  echo ""
+  echo "All channel defaults correctly applied!"
+  echo ""
+  echo "Output config excerpt:"
+  head -80 validated.json
+  echo "..."
 
-    mkdir -p $out
-    cp validated.json $out/config-with-defaults.json
-    echo "passed" > $out/result
-  ''
+  mkdir -p $out
+  cp validated.json $out/config-with-defaults.json
+  echo "passed" > $out/result
+''
