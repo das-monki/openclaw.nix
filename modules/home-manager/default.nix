@@ -23,7 +23,7 @@ let
   defaultPackage = llm-agents.packages.${pkgs.stdenv.hostPlatform.system}.openclaw;
 
   # Collect all packages from plugins + skillPackages
-  pluginPackages = lib.flatten (lib.mapAttrsToList (_: p: p.packages) cfg.plugins);
+  pluginPackages = lib.flatten (lib.mapAttrsToList (_: p: p.packages or [ ]) cfg.plugins);
   allPackages = cfg.skillPackages ++ pluginPackages;
 
   # Collect all skills from plugins + skills
@@ -32,6 +32,14 @@ let
     value = p.skill;
   }) cfg.plugins;
   allSkills = cfg.skills // pluginSkills;
+
+  # Collect all required secrets from plugins
+  requiredSecrets = lib.unique (
+    lib.flatten (lib.mapAttrsToList (_: p: p.secrets or [ ]) cfg.plugins)
+  );
+
+  # Find missing secrets (required but not in secretFiles)
+  missingSecrets = lib.filter (s: !(cfg.secretFiles ? ${s})) requiredSecrets;
 
   # Generate JSON config from Nix
   configJson = builtins.toJSON cfg.settings;
@@ -75,6 +83,19 @@ let
       '') cfg.secretFiles
     )}
 
+    # Runtime check for required secrets from plugins
+    ${lib.optionalString (requiredSecrets != [ ]) ''
+      missing=""
+      ${lib.concatStringsSep "\n" (map (secret: ''
+        if [ -z "''${${secret}:-}" ]; then
+          missing="$missing ${secret}"
+        fi
+      '') requiredSecrets)}
+      if [ -n "$missing" ]; then
+        echo "Warning: Missing required secrets for plugins:$missing" >&2
+      fi
+    ''}
+
     exec "${cfg.package}/bin/openclaw" "$@"
   '';
 
@@ -89,6 +110,11 @@ let
         type = lib.types.listOf lib.types.package;
         default = [ ];
         description = "CLI tools required by this skill";
+      };
+      secrets = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "Environment variables required by this skill (for validation)";
       };
     };
   };
@@ -225,6 +251,13 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Build-time validation: check that required secrets are wired
+    assertions = map (secret: {
+      assertion = cfg.secretFiles ? ${secret};
+      message = "openclaw: Plugin requires secret '${secret}' in services.openclaw.secretFiles. "
+        + "Add it or set the plugin's secrets = [] if not needed.";
+    }) requiredSecrets;
+
     # Ensure state directories exist
     home.activation.openclawDirs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run mkdir -p "${cfg.stateDir}" "${cfg.workspaceDir}" "${cfg.workspaceDir}/skills"
