@@ -84,8 +84,13 @@
           isLinux = pkgs.stdenv.isLinux;
         in
         {
-          # Schema validation
+          # Schema validation (basic)
           config-schema = pkgs.callPackage ./checks/config-schema.nix {
+            configSchema = self.packages.${system}.openclaw-config-schema;
+          };
+
+          # Schema validation with channel configs (tests nested defaults)
+          config-schema-channels = pkgs.callPackage ./checks/config-schema-channels.nix {
             configSchema = self.packages.${system}.openclaw-config-schema;
           };
 

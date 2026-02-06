@@ -1,14 +1,13 @@
-# Validate a test config by merging with upstream defaults and checking against schema
+# Validate a minimal config through openclaw's Zod schema
 {
   lib,
   runCommand,
-  jq,
-  check-jsonschema,
+  nodejs_22,
   configSchema,
 }:
 
 let
-  # Minimal test config - will be merged with defaults before validation
+  # Minimal test config
   testConfig = builtins.toJSON {
     gateway = {
       mode = "local";
@@ -20,45 +19,27 @@ in
 
 runCommand "openclaw-config-schema-check"
   {
-    nativeBuildInputs = [
-      jq
-      check-jsonschema
-    ];
+    nativeBuildInputs = [ nodejs_22 ];
   }
   ''
-    echo "Testing openclaw config schema validation..."
-    echo "Schema: ${configSchema}/config-schema.json"
-    echo "Defaults: ${configSchema}/config-defaults.json"
-    echo "User config: ${testConfigFile}"
+    echo "Testing openclaw Zod schema validation..."
+    echo "Validator: ${configSchema}/bin/validate-openclaw-config"
+    echo "Config: ${testConfigFile}"
     echo ""
-    echo "User config contents:"
+    echo "Input config:"
     cat ${testConfigFile}
     echo ""
 
-    echo "Defaults excerpt (first 30 lines):"
-    head -30 ${configSchema}/config-defaults.json
+    echo "Parsing through Zod schema (applies defaults)..."
+    ${configSchema}/bin/validate-openclaw-config ${testConfigFile} > validated.json
+
+    echo ""
+    echo "Validation passed! Config with defaults applied:"
+    head -30 validated.json
     echo "..."
     echo ""
 
-    echo "Merging user config with defaults..."
-    jq -s '.[0] * .[1]' \
-      ${configSchema}/config-defaults.json \
-      ${testConfigFile} \
-      > merged-config.json
-
-    echo "Merged config excerpt (first 50 lines):"
-    head -50 merged-config.json
-    echo "..."
-    echo ""
-
-    echo "Validating merged config against schema..."
-    check-jsonschema \
-      --schemafile ${configSchema}/config-schema.json \
-      merged-config.json
-
-    echo ""
-    echo "Validation passed!"
     mkdir -p $out
-    cp merged-config.json $out/config-with-defaults.json
+    cp validated.json $out/config-with-defaults.json
     echo "passed" > $out/result
   ''

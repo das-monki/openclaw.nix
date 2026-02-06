@@ -42,29 +42,21 @@ let
     openclaw = cfg.package;
   };
 
-  # Validated config file (merges with upstream defaults, then validates against schema)
+  # Validated config file (parses through Zod which applies all defaults)
   validatedConfigFile =
     pkgs.runCommand "openclaw-validated-config.json"
       {
-        nativeBuildInputs = [
-          pkgs.jq
-          pkgs.check-jsonschema
-        ];
+        nativeBuildInputs = [ pkgs.nodejs_22 ];
       }
       ''
-        echo "Merging user config with upstream defaults..."
+        echo "Validating config through openclaw's Zod schema..."
+        echo "This applies runtime defaults to all configured paths."
+        echo ""
 
-        # Deep merge: defaults * user config (user config wins)
-        jq -s '.[0] * .[1]' \
-          ${configSchema}/config-defaults.json \
-          ${rawConfigFile} \
-          > merged-config.json
-
-        echo "Validating merged config against upstream schema..."
-        check-jsonschema --schemafile ${configSchema}/config-schema.json merged-config.json
+        # Parse through Zod - applies defaults and validates
+        ${configSchema}/bin/validate-openclaw-config ${rawConfigFile} > $out
 
         echo "Validation passed!"
-        cp merged-config.json $out
       '';
 
   # Use validated or raw config based on setting
@@ -228,11 +220,11 @@ in
       type = lib.types.bool;
       default = false;
       description = ''
-        Validate config against upstream JSON schema at build time.
-        When enabled, the user config is merged with openclaw's runtime defaults
-        (extracted from the Zod schema), then validated against the JSON schema.
-        Invalid configs will fail the build. The deployed config file will
-        include all defaults merged in.
+        Validate config through openclaw's Zod schema at build time.
+        When enabled, the user config is parsed through the exact same Zod
+        schema that openclaw uses at runtime. This applies all defaults to
+        configured paths and validates the result. Invalid configs will fail
+        the build. The deployed config file includes all defaults applied.
       '';
     };
   };
