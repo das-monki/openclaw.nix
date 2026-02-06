@@ -4,16 +4,14 @@
   stdenv,
   fetchFromGitHub,
   nodejs_22,
-  pnpm,
-  cacert,
+  pnpm_10,
+  fetchPnpmDeps,
+  pnpmConfigHook,
   openclaw,
 }:
 
-stdenv.mkDerivation {
-  pname = "openclaw-config-schema";
-  version = openclaw.version;
-
-  # Fetch source matching the package version
+let
+  # Source must be defined outside stdenv.mkDerivation for fetchPnpmDeps
   src = fetchFromGitHub {
     owner = "openclaw";
     repo = "openclaw";
@@ -21,26 +19,40 @@ stdenv.mkDerivation {
     hash = openclaw.src.outputHash;
   };
 
+  # Pre-fetch pnpm dependencies (Fixed Output Derivation - has network access)
+  pnpmDeps = fetchPnpmDeps {
+    pname = "openclaw-config-schema-deps";
+    version = openclaw.version;
+    inherit src;
+    pnpm = pnpm_10;
+    # pnpm lockfile version (3 is latest supported)
+    fetcherVersion = 3;
+    hash = "sha256-uOhFo64Y0JmgY4JFjoX6z7M/Vg9mnjBa/oOPWmXz2IU=";
+  };
+in
+stdenv.mkDerivation {
+  pname = "openclaw-config-schema";
+  version = openclaw.version;
+
+  inherit src pnpmDeps;
+
   nativeBuildInputs = [
     nodejs_22
-    pnpm
-    cacert
+    pnpm_10
+    pnpmConfigHook
   ];
 
-  # Skip configure phase
-  dontConfigure = true;
+  # Let pnpmConfigHook run during configure to set up node_modules
 
   buildPhase = ''
     runHook preBuild
 
+    # Set up pnpm environment
     export HOME=$TMPDIR
-    export npm_config_cache=$TMPDIR/.npm
+    export PNPM_HOME=$TMPDIR/.pnpm
 
-    # Install dependencies
-    pnpm install --frozen-lockfile --ignore-scripts
-
-    # Extract schema using tsx
-    pnpm exec tsx -e "
+    # Extract schema using tsx (run directly from node_modules)
+    ./node_modules/.bin/tsx -e "
       import { OpenClawSchema } from './src/config/zod-schema.ts';
       const schema = OpenClawSchema.toJSONSchema({
         target: 'draft-07',
