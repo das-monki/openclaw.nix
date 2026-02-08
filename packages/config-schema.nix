@@ -28,7 +28,7 @@ let
     pnpm = pnpm_10;
     # pnpm lockfile version (3 is latest supported)
     fetcherVersion = 3;
-    hash = "sha256-uOhFo64Y0JmgY4JFjoX6z7M/Vg9mnjBa/oOPWmXz2IU=";
+    hash = "sha256-BIdgolvS9JIJpBtttlMJ9FgP3QrGFitEIAEmigz3Z7E=";
   };
 in
 stdenv.mkDerivation {
