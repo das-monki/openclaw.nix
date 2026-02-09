@@ -103,11 +103,13 @@ let
     # Runtime check for required secrets from plugins
     ${lib.optionalString (requiredSecrets != [ ]) ''
       missing=""
-      ${lib.concatStringsSep "\n" (map (secret: ''
-        if [ -z "''${${secret}:-}" ]; then
-          missing="$missing ${secret}"
-        fi
-      '') requiredSecrets)}
+      ${lib.concatStringsSep "\n" (
+        map (secret: ''
+          if [ -z "''${${secret}:-}" ]; then
+            missing="$missing ${secret}"
+          fi
+        '') requiredSecrets
+      )}
       if [ -n "$missing" ]; then
         echo "Warning: Missing required secrets for plugins:$missing" >&2
       fi
@@ -262,7 +264,8 @@ in
     # Build-time validation: check that required secrets are wired
     assertions = map (secret: {
       assertion = cfg.secretFiles ? ${secret};
-      message = "openclaw: Plugin requires secret '${secret}' in services.openclaw.secretFiles. "
+      message =
+        "openclaw: Plugin requires secret '${secret}' in services.openclaw.secretFiles. "
         + "Add it or set the plugin's secrets = [] if not needed.";
     }) requiredSecrets;
 

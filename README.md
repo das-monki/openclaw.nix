@@ -35,10 +35,11 @@ Add to your flake inputs:
 
   services.openclaw = {
     enable = true;
+    validateConfig = true;  # validate config at build time
 
     settings = {
       gateway.mode = "local";
-      channels.telegram.enable = true;
+      channels.telegram.botToken = "\${TELEGRAM_BOT_TOKEN}";
     };
 
     secretFiles = {
@@ -46,11 +47,16 @@ Add to your flake inputs:
       TELEGRAM_BOT_TOKEN = config.age.secrets.telegram.path;
     };
 
-    skillPackages = with pkgs; [ jq curl ripgrep ];
-
-    skills = {
-      weather = ./skills/weather.md;
+    # Plugins bundle skills with their CLI dependencies
+    plugins = {
+      weather = {
+        skill = ./skills/weather.md;
+        packages = [ pkgs.curl pkgs.jq ];
+      };
     };
+
+    # Global tools available to all skills
+    skillPackages = [ pkgs.ripgrep ];
   };
 }
 ```
@@ -91,8 +97,10 @@ For headless servers where you want the service to start at boot:
 | `package` | package | from llm-agents | Openclaw package to use |
 | `settings` | attrs | `{}` | Configuration (converted to JSON) |
 | `secretFiles` | attrsOf str | `{}` | Env var → secret file path |
-| `skillPackages` | listOf package | `[]` | CLI tools for skills |
-| `skills` | attrsOf path | `{}` | Skill name → markdown path |
+| `plugins` | attrsOf submodule | `{}` | Skills bundled with CLI tools (recommended) |
+| `skillPackages` | listOf package | `[]` | Global CLI tools for all skills |
+| `skills` | attrsOf path | `{}` | Simple skills without dependencies |
+| `validateConfig` | bool | `false` | Validate config through Zod at build time |
 | `stateDir` | str | `~/.openclaw` | State directory |
 | `gatewayPort` | port | `18789` | Gateway port |
 
@@ -106,20 +114,48 @@ Same as above, plus:
 | `group` | str | `"openclaw"` | System group |
 | `stateDir` | str | `/var/lib/openclaw` | State directory |
 
-## Skills
+## Skills and Plugins
 
-Skills are markdown files that teach the AI how to use CLI tools. Place them in your config and reference them:
+Skills are markdown files that teach the AI how to use CLI tools.
+
+### Plugins (Recommended)
+
+Plugins bundle a skill with its required CLI tools. This is the preferred approach:
 
 ```nix
 services.openclaw = {
-  skillPackages = [ pkgs.curl pkgs.jq ];
+  plugins = {
+    weather = {
+      skill = ./skills/weather.md;
+      packages = [ pkgs.curl pkgs.jq ];
+      secrets = [ "WEATHER_API_KEY" ];  # optional: validates these exist in secretFiles
+    };
+    github = {
+      skill = ./skills/github.md;
+      packages = [ pkgs.gh ];
+    };
+  };
+
+  # Global tools available to all skills
+  skillPackages = [ pkgs.ripgrep pkgs.fd ];
+};
+```
+
+### Simple Skills
+
+For skills without CLI dependencies, use the simpler `skills` option:
+
+```nix
+services.openclaw = {
   skills = {
-    weather = ./skills/weather.md;
+    notes = ./skills/notes.md;
   };
 };
 ```
 
-Example skill (`skills/weather.md`):
+### Example Skill File
+
+`skills/weather.md`:
 
 ```markdown
 # Weather Skill
@@ -223,6 +259,44 @@ nix build .#openclaw
 # Test module evaluation
 nix build .#checks.x86_64-linux.module-eval
 ```
+
+## Maintenance
+
+### Updating the llm-agents Input
+
+When updating the `llm-agents` flake input (which provides the openclaw package), you also need to update the pnpm dependency hash in `packages/config-schema.nix`:
+
+1. **Update the flake input:**
+   ```bash
+   nix flake update llm-agents
+   ```
+
+2. **Set the hash to empty** in `packages/config-schema.nix`:
+   ```nix
+   hash = "";
+   ```
+
+3. **Build to get the new hash:**
+   ```bash
+   nix build .#openclaw-config-schema
+   ```
+   This will fail with an error showing the correct hash:
+   ```
+   specified: sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+   got:       sha256-xxxx...  # ← use this one
+   ```
+
+4. **Update with the correct hash** in `packages/config-schema.nix`:
+   ```nix
+   hash = "sha256-xxxx...";
+   ```
+
+5. **Verify everything works:**
+   ```bash
+   nix flake check
+   ```
+
+This is needed because the config-schema package extracts validation tools from openclaw's source, which includes a `pnpm-lock.yaml` that changes between versions. Nix requires a known hash for reproducible builds.
 
 ## License
 
