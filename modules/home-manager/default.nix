@@ -288,8 +288,8 @@ in
       }) allSkills)
     ];
 
-    # Add wrapper to PATH
-    home.packages = [ gatewayWrapper ];
+    # Add wrapper and skill/plugin packages to PATH
+    home.packages = [ gatewayWrapper ] ++ allPackages;
 
     # Systemd user service (Linux)
     systemd.user.services.openclaw-gateway = lib.mkIf pkgs.stdenv.isLinux {
