@@ -89,3 +89,7 @@ skillPackages = [ pkgs.ripgrep pkgs.fd ];
 - `allPackages` = `skillPackages` ++ packages from all plugins
 - `allSkills` = `skills` // skills from all plugins
 - `pluginType` = submodule with `skill`, `packages`, `secrets` options
+
+## Troubleshooting
+
+See `docs/browser-troubleshooting.md` for debugging browser tool issues (port conflicts, "Can't reach browser control service" errors).

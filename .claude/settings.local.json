@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh search issues:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh api:*)",
+      "Bash(gh search code:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(ssh root@dev-01.tail47f1b.ts.net \"echo ''=== Chrome process state ==='' && cat /proc/2478087/status 2>&1 | grep -E ''State|Name|Pid|PPid|Threads'' && echo && echo ''=== CPU usage ==='' && top -b -n1 -p 2478087 2>/dev/null | tail -3 && echo && echo ''=== FD count ==='' && ls /proc/2478087/fd 2>/dev/null | wc -l && echo && echo ''=== Test local curl with timeout ==='' && timeout 3 curl -v http://127.0.0.1:18801/json/version 2>&1 | head -20\")"
+    ]
+  }
+}
