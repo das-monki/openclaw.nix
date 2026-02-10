@@ -285,6 +285,8 @@ in
       home = cfg.stateDir;
       createHome = true;
       description = "Openclaw service user";
+      # Add skill/plugin packages to user profile so they're in PATH for tool execution
+      packages = allPackages;
     };
 
     users.groups.${cfg.group} = lib.mkIf (cfg.group == "openclaw") { };
