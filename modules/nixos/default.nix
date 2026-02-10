@@ -33,12 +33,12 @@ let
     lib.flatten (lib.mapAttrsToList (_: p: p.secrets or [ ]) cfg.plugins)
   );
 
-  # Inject paths.workspace into settings so openclaw uses our managed workspace
-  settingsWithPaths = lib.recursiveUpdate cfg.settings {
-    paths.workspace = cfg.workspaceDir;
+  # Inject agents.defaults.workspace into settings so openclaw uses our managed workspace
+  settingsWithWorkspace = lib.recursiveUpdate cfg.settings {
+    agents.defaults.workspace = cfg.workspaceDir;
   };
 
-  configJson = builtins.toJSON settingsWithPaths;
+  configJson = builtins.toJSON settingsWithWorkspace;
   rawConfigFile = pkgs.writeText "openclaw.json" configJson;
 
   # Build config schema for validation

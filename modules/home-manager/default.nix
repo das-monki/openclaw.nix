@@ -41,13 +41,13 @@ let
   # Find missing secrets (required but not in secretFiles)
   missingSecrets = lib.filter (s: !(cfg.secretFiles ? ${s})) requiredSecrets;
 
-  # Inject paths.workspace into settings so openclaw uses our managed workspace
-  settingsWithPaths = lib.recursiveUpdate cfg.settings {
-    paths.workspace = cfg.workspaceDir;
+  # Inject agents.defaults.workspace into settings so openclaw uses our managed workspace
+  settingsWithWorkspace = lib.recursiveUpdate cfg.settings {
+    agents.defaults.workspace = cfg.workspaceDir;
   };
 
   # Generate JSON config from Nix
-  configJson = builtins.toJSON settingsWithPaths;
+  configJson = builtins.toJSON settingsWithWorkspace;
   rawConfigFile = pkgs.writeText "openclaw.json" configJson;
 
   # Build config schema for validation
